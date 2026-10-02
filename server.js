@@ -5,7 +5,7 @@ const puppeteer = require('puppeteer');
 const app = express();
 app.use(cors());
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 app.get('/stream', async (req, res) => {
     const tmdbId = req.query.tmdb;
@@ -15,22 +15,26 @@ app.get('/stream', async (req, res) => {
 
     let browser;
     try {
-        // Запускаем скрытый браузер
+        // Автоматически находим путь к установленному Chrome
+        const executablePath = puppeteer.executablePath();
+
         browser = await puppeteer.launch({
+            executablePath: executablePath,
             headless: 'new',
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
-                '--disable-gpu'
+                '--disable-gpu',
+                '--single-process'
             ]
         });
 
         const page = await browser.newPage();
         let m3u8Url = null;
 
-        // Перехватываем ВСЕ сетевые запросы страницы
+        // Перехватываем все сетевые запросы
         page.on('request', request => {
             const url = request.url();
             if (url.includes('.m3u8') && !m3u8Url) {
@@ -38,15 +42,14 @@ app.get('/stream', async (req, res) => {
             }
         });
 
-        // Заходим на страницу балансера
+        // Открываем балансер
         await page.goto(`https://vidsrc.me/embed/movie/${tmdbId}`, {
             waitUntil: 'networkidle2',
-            timeout: 15000
+            timeout: 20000
         }).catch(() => {});
 
-        // Даем 2 секунды JS-скриптам балансера сгенерировать поток
         if (!m3u8Url) {
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 3000));
         }
 
         await browser.close();
