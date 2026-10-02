@@ -16,41 +16,60 @@ app.get('/stream', async (req, res) => {
 
     let browser;
     try {
-        // Указываем бинарник chromium из пакета
         browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
+            args: [
+                ...chromium.args,
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process'
+            ],
+            defaultViewport: { width: 1280, height: 720 },
             executablePath: await chromium.executablePath(),
             headless: chromium.headless,
         });
 
         const page = await browser.newPage();
+
+        // Маскируемся под обычный браузер
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+        await page.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US,en;q=0.9',
+        });
+
         let m3u8Url = null;
 
-        // Перехватываем ссылки на .m3u8
+        // Перехватываем запросы со всей страницы и её iframe
         page.on('request', request => {
             const url = request.url();
-            if (url.includes('.m3u8') && !m3u8Url) {
+            if ((url.includes('.m3u8') || url.includes('master.m3u8')) && !m3u8Url) {
+                console.log('Найден m3u8:', url);
                 m3u8Url = url;
             }
         });
 
-        // Заходим на балансер
+        // Загружаем плеер
         await page.goto(`https://vidsrc.me/embed/movie/${tmdbId}`, {
-            waitUntil: 'networkidle2',
-            timeout: 25000
+            waitUntil: 'domcontentloaded',
+            timeout: 20000
         }).catch(() => {});
 
-        if (!m3u8Url) {
-            await new Promise(r => setTimeout(r, 3000));
-        }
+        // Ожидаем отрисовки элементов и пытаемся кликнуть по центру (запуск воспроизведения)
+        await new Promise(r => setTimeout(r, 3000));
+        await page.mouse.click(640, 360).catch(() => {});
+        
+        // Ожидаем отправки сетевых запросов после клика
+        await new Promise(r => setTimeout(r, 4000));
 
         await browser.close();
 
         if (m3u8Url) {
             return res.json({ url: m3u8Url });
         } else {
-            return res.status(404).json({ error: 'Поток m3u8 не перехвачен' });
+            return res.status(404).json({ 
+                error: 'Поток m3u8 не перехвачен',
+                tip: 'Возможно, плеер требует решения капчи или сменил структуру.'
+            });
         }
 
     } catch (e) {
