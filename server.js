@@ -15,7 +15,7 @@ app.get('/stream', async (req, res) => {
 
     let browser;
     try {
-        // Автоматически находим путь к установленному Chrome
+        // Находим Chrome внутри локальной папки .cache/puppeteer
         const executablePath = puppeteer.executablePath();
 
         browser = await puppeteer.launch({
@@ -34,7 +34,7 @@ app.get('/stream', async (req, res) => {
         const page = await browser.newPage();
         let m3u8Url = null;
 
-        // Перехватываем все сетевые запросы
+        // Перехватываем все сетевые запросы страницы
         page.on('request', request => {
             const url = request.url();
             if (url.includes('.m3u8') && !m3u8Url) {
@@ -42,7 +42,7 @@ app.get('/stream', async (req, res) => {
             }
         });
 
-        // Открываем балансер
+        // Заходим на балансер
         await page.goto(`https://vidsrc.me/embed/movie/${tmdbId}`, {
             waitUntil: 'networkidle2',
             timeout: 20000
