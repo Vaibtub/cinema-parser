@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const app = express();
 app.use(cors());
@@ -15,22 +16,18 @@ app.get('/stream', async (req, res) => {
 
     let browser;
     try {
+        // Указываем бинарник chromium из пакета
         browser = await puppeteer.launch({
-            headless: 'new',
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--single-process'
-            ]
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
         });
 
         const page = await browser.newPage();
         let m3u8Url = null;
 
-        // Перехват сетевых запросов .m3u8
+        // Перехватываем ссылки на .m3u8
         page.on('request', request => {
             const url = request.url();
             if (url.includes('.m3u8') && !m3u8Url) {
@@ -38,10 +35,10 @@ app.get('/stream', async (req, res) => {
             }
         });
 
-        // Заходим на балансер VidSrc
+        // Заходим на балансер
         await page.goto(`https://vidsrc.me/embed/movie/${tmdbId}`, {
             waitUntil: 'networkidle2',
-            timeout: 20000
+            timeout: 25000
         }).catch(() => {});
 
         if (!m3u8Url) {
